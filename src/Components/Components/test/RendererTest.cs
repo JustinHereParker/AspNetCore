@@ -1471,6 +1471,40 @@ namespace Microsoft.AspNetCore.Components.Test
         }
 
         [Fact]
+        public async Task ExceptionsReturnedUsingTaskFromExceptionCanBeHandled()
+        {
+            // Arrange
+            var renderer = new TestRenderer { ShouldHandleExceptions = true };
+            var component = new NestedAsyncComponent();
+            var exception = new InvalidTimeZoneException();
+
+            // Act/Assert
+            var componentId = renderer.AssignRootComponentId(component);
+            var renderTask = renderer.RenderRootComponentAsync(componentId, ParameterCollection.FromDictionary(new Dictionary<string, object>
+            {
+                [nameof(NestedAsyncComponent.EventActions)] = new Dictionary<int, IList<NestedAsyncComponent.ExecutionAction>>
+                {
+                    [0] = new[]
+                    {
+                        new NestedAsyncComponent.ExecutionAction
+                        {
+                            Event = NestedAsyncComponent.EventType.OnInitAsyncAsync,
+                            EventAction = () => Task.FromException<(int, NestedAsyncComponent.EventType)>(exception),
+                        },
+                    }
+                },
+                [nameof(NestedAsyncComponent.WhatToRender)] = new Dictionary<int, Func<NestedAsyncComponent, RenderFragment>>
+                {
+                    [0] = CreateRenderFactory(Array.Empty<int>()),
+                },
+            }));
+
+            Assert.True(renderTask.IsCompletedSuccessfully);
+            Assert.Equal(new[] { exception }, renderer.HandledExceptions);
+            await renderTask;
+        }
+
+        [Fact]
         public async Task ExceptionsThrownAsynchronouslyCanBeHandled()
         {
             // Arrange
@@ -1563,7 +1597,7 @@ namespace Microsoft.AspNetCore.Components.Test
         }
 
         [Fact]
-        public async Task ExceptionsThrownFromHandleAfter_AreHandled()
+        public async Task ExceptionsThrownFromHandleAfterRender_AreHandled()
         {
             // Arrange
             var renderer = new TestRenderer { ShouldHandleExceptions = true };
@@ -1616,7 +1650,7 @@ namespace Microsoft.AspNetCore.Components.Test
         }
 
         [Fact]
-        public void SynchronousCancelledTasks_HandleAfter_Works()
+        public void SynchronousCancelledTasks_HandleAfterRender_Works()
         {
             // Arrange
             var renderer = new TestRenderer { ShouldHandleExceptions = true };
@@ -1651,7 +1685,7 @@ namespace Microsoft.AspNetCore.Components.Test
         }
 
         [Fact]
-        public void AsynchronousCancelledTasks_HandleAfter_Works()
+        public void AsynchronousCancelledTasks_HandleAfterRender_Works()
         {
             // Arrange
             var renderer = new TestRenderer { ShouldHandleExceptions = true };
@@ -1686,7 +1720,7 @@ namespace Microsoft.AspNetCore.Components.Test
         }
 
         [Fact]
-        public async Task CanceledHandleAfterTasks_AreIgnored()
+        public async Task CanceledTasksInHandleAfterRender_AreIgnored()
         {
             // Arrange
             var renderer = new TestRenderer { ShouldHandleExceptions = true };
