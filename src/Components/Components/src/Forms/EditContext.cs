@@ -4,6 +4,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading.Tasks;
 
 namespace Microsoft.AspNetCore.Components.Forms
 {
@@ -31,6 +32,11 @@ namespace Microsoft.AspNetCore.Components.Forms
         /// An event that is raised when a field value changes.
         /// </summary>
         public event EventHandler<FieldIdentifier> OnFieldChanged;
+
+        /// <summary>
+        /// An event that is raised when validation is requested.
+        /// </summary>
+        public event EventHandler<ValidationContext> OnValidationRequested;
 
         /// <summary>
         /// Supplies a <see cref="FieldIdentifier"/> corresponding to a specified field name
@@ -117,6 +123,18 @@ namespace Microsoft.AspNetCore.Components.Forms
             => _fieldStates.TryGetValue(fieldIdentifier, out var state)
             ? state.IsModified
             : false;
+
+        /// <summary>
+        /// Validates the <see cref="Model"/>.
+        /// </summary>
+        /// <returns>A <see cref="Task"/> that resolves to true if the model is valid; false otherwise.</returns>
+        public async Task<bool> ValidateAsync()
+        {
+            var validationContext = new ValidationContext();
+            OnValidationRequested?.Invoke(this, validationContext);
+            await validationContext.CombinePendingTasks();
+            return !GetValidationMessages().Any();
+        }
 
         internal FieldState GetFieldState(FieldIdentifier fieldIdentifier, bool ensureExists)
         {

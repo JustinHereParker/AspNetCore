@@ -4,6 +4,7 @@
 using Microsoft.AspNetCore.Components.Forms;
 using System;
 using System.Linq;
+using System.Threading.Tasks;
 using Xunit;
 
 namespace Microsoft.AspNetCore.Components.Tests.Forms
@@ -183,6 +184,96 @@ namespace Microsoft.AspNetCore.Components.Tests.Forms
             // Act/Assert: After clearing a single store, we only see the results from other stores
             store1.Clear();
             Assert.Equal(new[] { "Store 2 field 1 message 1", }, editContext.GetValidationMessages());
+        }
+
+        [Fact]
+        public async Task CanValidate_Valid()
+        {
+            // Arrange
+            var editContext = new EditContext(new object());
+            var didReceiveCallback = false;
+            editContext.OnValidationRequested += (sender, validationContext) =>
+            {
+                Assert.Same(editContext, sender);
+                didReceiveCallback = true;
+            };
+
+            // Act
+            var isValid = await editContext.ValidateAsync();
+
+            // Assert
+            Assert.True(isValid);
+            Assert.True(didReceiveCallback);
+        }
+
+        [Fact]
+        public async Task CanValidate_Invalid()
+        {
+            // Arrange
+            var editContext = new EditContext(new object());
+            var messages = new ValidationMessageStore(editContext);
+            editContext.OnValidationRequested += (sender, validationContext) =>
+            {
+                Assert.Same(editContext, sender);
+                messages.Add(editContext.Field("some field"), "Some message");
+            };
+
+            // Act
+            var isValid = await editContext.ValidateAsync();
+
+            // Assert
+            Assert.False(isValid);
+        }
+
+        [Fact]
+        public async Task CanValidateWithAsyncTask_Valid()
+        {
+            // Arrange
+            var editContext = new EditContext(new object());
+            var didReceiveCallback = false;
+            editContext.OnValidationRequested += (sender, validationContext) =>
+            {
+                Assert.Same(editContext, sender);
+                validationContext.AddPendingTask(TestAsyncTask());
+                didReceiveCallback = true;
+            };
+
+            // Act
+            var isValid = await editContext.ValidateAsync();
+
+            // Assert
+            Assert.True(isValid);
+            Assert.True(didReceiveCallback);
+
+            async Task TestAsyncTask()
+            {
+                await Task.Yield();
+            }
+        }
+
+        [Fact]
+        public async Task CanValidateWithAsyncTask_Invalid()
+        {
+            // Arrange
+            var editContext = new EditContext(new object());
+            var messages = new ValidationMessageStore(editContext);
+            editContext.OnValidationRequested += (sender, validationContext) =>
+            {
+                Assert.Same(editContext, sender);
+                validationContext.AddPendingTask(TestAsyncTask());
+            };
+
+            // Act
+            var isValid = await editContext.ValidateAsync();
+
+            // Assert
+            Assert.False(isValid);
+
+            async Task TestAsyncTask()
+            {
+                await Task.Yield();
+                messages.Add(editContext.Field("some field"), "Some message");
+            }
         }
     }
 }
