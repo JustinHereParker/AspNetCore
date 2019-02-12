@@ -174,13 +174,17 @@ namespace Microsoft.AspNetCore.Components.Test
         {
             // Arrange
             var renderer = new TestRenderer();
-            var component = new AsyncComponent(5); // Triggers n renders, the first one creating <p>n</p> and the n-1 renders asynchronously update the value.
+            var tcs = new TaskCompletionSource<int>();
+            var component = new AsyncComponent(tcs.Task, 5); // Triggers n renders, the first one creating <p>n</p> and the n-1 renders asynchronously update the value.
 
             // Act
             var componentId = renderer.AssignRootComponentId(component);
-            await renderer.InvokeAsync(() => renderer.RenderRootComponentAsync(componentId));
+            var renderTask = renderer.InvokeAsync(() => renderer.RenderRootComponentAsync(componentId));
 
             // Assert
+            Assert.False(renderTask.IsCompleted);
+            tcs.SetResult(0);
+            await renderTask;
             Assert.Equal(5, renderer.Batches.Count);
 
             // First render
@@ -441,11 +445,11 @@ namespace Microsoft.AspNetCore.Components.Test
             var task = renderer.DispatchEventAsync(componentId, eventHandlerId, eventArgs);
 
             // This should always be run synchronously
-            Assert.True(task.IsCompleted);
+            Assert.True(task.IsCompletedSuccessfully);
         }
 
         [Fact]
-        public async Task CanDispatchEventsToTopLevelComponents()
+        public void CanDispatchEventsToTopLevelComponents()
         {
             // Arrange: Render a component with an event handler
             var renderer = new TestRenderer();
@@ -468,12 +472,14 @@ namespace Microsoft.AspNetCore.Components.Test
 
             // Act/Assert: Event can be fired
             var eventArgs = new UIEventArgs();
-            await renderer.DispatchEventAsync(componentId, eventHandlerId, eventArgs);
+            var renderTask = renderer.DispatchEventAsync(componentId, eventHandlerId, eventArgs);
+
+            Assert.True(renderTask.IsCompletedSuccessfully);
             Assert.Same(eventArgs, receivedArgs);
         }
 
         [Fact]
-        public async Task CanDispatchTypedEventsToTopLevelComponents()
+        public void CanDispatchTypedEventsToTopLevelComponents()
         {
             // Arrange: Render a component with an event handler
             var renderer = new TestRenderer();
@@ -496,12 +502,14 @@ namespace Microsoft.AspNetCore.Components.Test
 
             // Act/Assert: Event can be fired
             var eventArgs = new UIMouseEventArgs();
-            await renderer.DispatchEventAsync(componentId, eventHandlerId, eventArgs);
+            var renderTask = renderer.DispatchEventAsync(componentId, eventHandlerId, eventArgs);
+
+            Assert.True(renderTask.IsCompletedSuccessfully);
             Assert.Same(eventArgs, receivedArgs);
         }
 
         [Fact]
-        public async Task CanDispatchActionEventsToTopLevelComponents()
+        public void CanDispatchActionEventsToTopLevelComponents()
         {
             // Arrange: Render a component with an event handler
             var renderer = new TestRenderer();
@@ -524,12 +532,14 @@ namespace Microsoft.AspNetCore.Components.Test
 
             // Act/Assert: Event can be fired
             var eventArgs = new UIMouseEventArgs();
-            await renderer.DispatchEventAsync(componentId, eventHandlerId, eventArgs);
+            var renderTask = renderer.DispatchEventAsync(componentId, eventHandlerId, eventArgs);
+
+            Assert.True(renderTask.IsCompletedSuccessfully);
             Assert.NotNull(receivedArgs);
         }
 
         [Fact]
-        public async Task CanDispatchEventsToNestedComponents()
+        public void CanDispatchEventsToNestedComponents()
         {
             UIEventArgs receivedArgs = null;
 
@@ -563,12 +573,14 @@ namespace Microsoft.AspNetCore.Components.Test
 
             // Act/Assert: Event can be fired
             var eventArgs = new UIEventArgs();
-            await renderer.DispatchEventAsync(nestedComponentId, eventHandlerId, eventArgs);
+            var renderTask = renderer.DispatchEventAsync(nestedComponentId, eventHandlerId, eventArgs);
+
+            Assert.True(renderTask.IsCompletedSuccessfully);
             Assert.Same(eventArgs, receivedArgs);
         }
 
         [Fact]
-        public async Task ThrowsIfComponentDoesNotHandleEvents()
+        public void ThrowsIfComponentDoesNotHandleEvents()
         {
             // Arrange: Render a component with an event handler
             var renderer = new TestRenderer();
@@ -590,21 +602,27 @@ namespace Microsoft.AspNetCore.Components.Test
             var eventArgs = new UIEventArgs();
 
             // Act/Assert
-            var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
-                renderer.DispatchEventAsync(componentId, eventHandlerId, eventArgs));
+            var ex = Assert.Throws<InvalidOperationException>(() =>
+            {
+                // Verifies that the exception is thrown synchronously.
+                _ = renderer.DispatchEventAsync(componentId, eventHandlerId, eventArgs);
+            });
             Assert.Equal($"The component of type {typeof(TestComponent).FullName} cannot receive " +
                 $"events because it does not implement {typeof(IHandleEvent).FullName}.", ex.Message);
         }
 
         [Fact]
-        public async Task CannotDispatchEventsToUnknownComponents()
+        public void CannotDispatchEventsToUnknownComponents()
         {
             // Arrange
             var renderer = new TestRenderer();
 
             // Act/Assert
-            await Assert.ThrowsAsync<ArgumentException>(() =>
-                renderer.DispatchEventAsync(123, 0, new UIEventArgs()));
+            Assert.Throws<ArgumentException>(() =>
+            {
+                // Intentionally written this way to verify that the exception is thrown synchronously.
+                _ = renderer.DispatchEventAsync(123, 0, new UIEventArgs());
+            });
         }
 
         [Fact]
@@ -806,7 +824,7 @@ namespace Microsoft.AspNetCore.Components.Test
         }
 
         [Fact]
-        public async Task DisposesEventHandlersWhenAttributeValueChanged()
+        public void DisposesEventHandlersWhenAttributeValueChanged()
         {
             // Arrange
             var renderer = new TestRenderer();
@@ -823,7 +841,8 @@ namespace Microsoft.AspNetCore.Components.Test
 
             // Act/Assert 1: Event handler fires when we trigger it
             Assert.Equal(0, eventCount);
-            await renderer.DispatchEventAsync(componentId, origEventHandlerId, args: null);
+            var renderTask = renderer.DispatchEventAsync(componentId, origEventHandlerId, args: null);
+            Assert.True(renderTask.IsCompletedSuccessfully);
             Assert.Equal(1, eventCount);
 
             // Now change the attribute value
@@ -832,16 +851,21 @@ namespace Microsoft.AspNetCore.Components.Test
             component.TriggerRender();
 
             // Act/Assert 2: Can no longer fire the original event, but can fire the new event
-            await Assert.ThrowsAsync<ArgumentException>(() =>
-                renderer.DispatchEventAsync(componentId, origEventHandlerId, args: null));
+            Assert.Throws<ArgumentException>(() =>
+            {
+                // Verifies that the exception is thrown synchronously.
+                _ = renderer.DispatchEventAsync(componentId, origEventHandlerId, args: null);
+            });
+
             Assert.Equal(1, eventCount);
             Assert.Equal(0, newEventCount);
-            await renderer.DispatchEventAsync(componentId, origEventHandlerId + 1, args: null);
+            renderTask = renderer.DispatchEventAsync(componentId, origEventHandlerId + 1, args: null);
+            Assert.True(renderTask.IsCompletedSuccessfully);
             Assert.Equal(1, newEventCount);
         }
 
         [Fact]
-        public async Task DisposesEventHandlersWhenAttributeRemoved()
+        public void DisposesEventHandlersWhenAttributeRemoved()
         {
             // Arrange
             var renderer = new TestRenderer();
@@ -858,7 +882,8 @@ namespace Microsoft.AspNetCore.Components.Test
 
             // Act/Assert 1: Event handler fires when we trigger it
             Assert.Equal(0, eventCount);
-            await renderer.DispatchEventAsync(componentId, origEventHandlerId, args: null);
+            var renderTask = renderer.DispatchEventAsync(componentId, origEventHandlerId, args: null);
+            Assert.True(renderTask.IsCompletedSuccessfully);
             Assert.Equal(1, eventCount);
 
             // Now remove the event attribute
@@ -866,13 +891,16 @@ namespace Microsoft.AspNetCore.Components.Test
             component.TriggerRender();
 
             // Act/Assert 2: Can no longer fire the original event
-            await Assert.ThrowsAsync<ArgumentException>(() =>
-                renderer.DispatchEventAsync(componentId, origEventHandlerId, args: null));
+            Assert.Throws<ArgumentException>(() =>
+            {
+                // Verifies that the exception is thrown synchronously.
+                _ = renderer.DispatchEventAsync(componentId, origEventHandlerId, args: null);
+            });
             Assert.Equal(1, eventCount);
         }
 
         [Fact]
-        public async Task DisposesEventHandlersWhenOwnerComponentRemoved()
+        public void DisposesEventHandlersWhenOwnerComponentRemoved()
         {
             // Arrange
             var renderer = new TestRenderer();
@@ -905,7 +933,8 @@ namespace Microsoft.AspNetCore.Components.Test
 
             // Act/Assert 1: Event handler fires when we trigger it
             Assert.Equal(0, eventCount);
-            await renderer.DispatchEventAsync(childComponentId, eventHandlerId, args: null);
+            var renderTask = renderer.DispatchEventAsync(childComponentId, eventHandlerId, args: null);
+            Assert.True(renderTask.IsCompletedSuccessfully);
             Assert.Equal(1, eventCount);
 
             // Now remove the EventComponent
@@ -913,13 +942,16 @@ namespace Microsoft.AspNetCore.Components.Test
             component.TriggerRender();
 
             // Act/Assert 2: Can no longer fire the original event
-            await Assert.ThrowsAsync<ArgumentException>(() =>
-                renderer.DispatchEventAsync(eventHandlerId, eventHandlerId, args: null));
+            Assert.Throws<ArgumentException>(() =>
+            {
+                // Verifies that the exception is thrown synchronously.
+                _ = renderer.DispatchEventAsync(eventHandlerId, eventHandlerId, args: null);
+            });
             Assert.Equal(1, eventCount);
         }
 
         [Fact]
-        public async Task DisposesEventHandlersWhenAncestorElementRemoved()
+        public void DisposesEventHandlersWhenAncestorElementRemoved()
         {
             // Arrange
             var renderer = new TestRenderer();
@@ -936,7 +968,8 @@ namespace Microsoft.AspNetCore.Components.Test
 
             // Act/Assert 1: Event handler fires when we trigger it
             Assert.Equal(0, eventCount);
-            await renderer.DispatchEventAsync(componentId, origEventHandlerId, args: null);
+            var renderTask = renderer.DispatchEventAsync(componentId, origEventHandlerId, args: null);
+            Assert.True(renderTask.IsCompletedSuccessfully);
             Assert.Equal(1, eventCount);
 
             // Now remove the ancestor element
@@ -944,13 +977,16 @@ namespace Microsoft.AspNetCore.Components.Test
             component.TriggerRender();
 
             // Act/Assert 2: Can no longer fire the original event
-            await Assert.ThrowsAsync<ArgumentException>(() =>
-                renderer.DispatchEventAsync(componentId, origEventHandlerId, args: null));
+            Assert.Throws<ArgumentException>(() =>
+            {
+                // Verifies that the exception is thrown synchronously.
+                _ = renderer.DispatchEventAsync(componentId, origEventHandlerId, args: null);
+            });
             Assert.Equal(1, eventCount);
         }
 
         [Fact]
-        public async Task AllRendersTriggeredSynchronouslyDuringEventHandlerAreHandledAsSingleBatch()
+        public void AllRendersTriggeredSynchronouslyDuringEventHandlerAreHandledAsSingleBatch()
         {
             // Arrange: A root component with a child whose event handler explicitly queues
             // a re-render of both the root component and the child
@@ -984,9 +1020,10 @@ namespace Microsoft.AspNetCore.Components.Test
             Assert.Single(renderer.Batches);
 
             // Act
-            await renderer.DispatchEventAsync(childComponentId, origEventHandlerId, args: null);
+            var renderTask = renderer.DispatchEventAsync(childComponentId, origEventHandlerId, args: null);
 
             // Assert
+            Assert.True(renderTask.IsCompletedSuccessfully);
             Assert.Equal(2, renderer.Batches.Count);
             var batch = renderer.Batches.Last();
             Assert.Collection(batch.DiffsInOrder,
@@ -1135,7 +1172,7 @@ namespace Microsoft.AspNetCore.Components.Test
         }
 
         [Fact]
-        public async Task QueuedRenderIsSkippedIfComponentWasAlreadyDisposedInSameBatch()
+        public void QueuedRenderIsSkippedIfComponentWasAlreadyDisposedInSameBatch()
         {
             // Arrange
             var renderer = new TestRenderer();
@@ -1174,9 +1211,10 @@ namespace Microsoft.AspNetCore.Components.Test
 
             // Act
             // The fact that there's no error here is the main thing we're testing
-            await renderer.DispatchEventAsync(childComponentId, origEventHandlerId, args: null);
+            var renderTask = renderer.DispatchEventAsync(childComponentId, origEventHandlerId, args: null);
 
             // Assert: correct render result
+            Assert.True(renderTask.IsCompletedSuccessfully);
             var newBatch = renderer.Batches.Skip(1).Single();
             Assert.Equal(1, newBatch.DisposedComponentIDs.Count);
             Assert.Equal(1, newBatch.DiffsByComponentId.Count);
@@ -1189,7 +1227,7 @@ namespace Microsoft.AspNetCore.Components.Test
         }
 
         [Fact]
-        public async Task CanCombineBindAndConditionalAttribute()
+        public void CanCombineBindAndConditionalAttribute()
         {
             // This test represents https://github.com/aspnet/Blazor/issues/624
 
@@ -1205,7 +1243,9 @@ namespace Microsoft.AspNetCore.Components.Test
 
             // Act: Toggle the checkbox
             var eventArgs = new UIChangeEventArgs { Value = true };
-            await renderer.DispatchEventAsync(componentId, checkboxChangeEventHandlerId, eventArgs);
+            var renderTask =  renderer.DispatchEventAsync(componentId, checkboxChangeEventHandlerId, eventArgs);
+
+            Assert.True(renderTask.IsCompletedSuccessfully);
             var latestBatch = renderer.Batches.Last();
             var latestDiff = latestBatch.DiffsInOrder.Single();
             var referenceFrames = latestBatch.ReferenceFrames;
@@ -1439,7 +1479,7 @@ namespace Microsoft.AspNetCore.Components.Test
         }
 
         [Fact]
-        public async Task ExceptionsThrownSynchronouslyCanBeHandled()
+        public void ExceptionsThrownSynchronouslyCanBeHandled()
         {
             // Arrange
             var renderer = new TestRenderer { ShouldHandleExceptions = true };
@@ -1448,7 +1488,7 @@ namespace Microsoft.AspNetCore.Components.Test
 
             // Act/Assert
             var componentId = renderer.AssignRootComponentId(component);
-            await renderer.RenderRootComponentAsync(componentId, ParameterCollection.FromDictionary(new Dictionary<string, object>
+            var renderTask = renderer.RenderRootComponentAsync(componentId, ParameterCollection.FromDictionary(new Dictionary<string, object>
             {
                 [nameof(NestedAsyncComponent.EventActions)] = new Dictionary<int, IList<NestedAsyncComponent.ExecutionAction>>
                 {
@@ -1467,11 +1507,12 @@ namespace Microsoft.AspNetCore.Components.Test
                 },
             }));
 
+            Assert.True(renderTask.IsCompletedSuccessfully);
             Assert.Equal(new[] { exception }, renderer.HandledExceptions);
         }
 
         [Fact]
-        public async Task ExceptionsReturnedUsingTaskFromExceptionCanBeHandled()
+        public void ExceptionsReturnedUsingTaskFromExceptionCanBeHandled()
         {
             // Arrange
             var renderer = new TestRenderer { ShouldHandleExceptions = true };
@@ -1501,7 +1542,6 @@ namespace Microsoft.AspNetCore.Components.Test
 
             Assert.True(renderTask.IsCompletedSuccessfully);
             Assert.Equal(new[] { exception }, renderer.HandledExceptions);
-            await renderTask;
         }
 
         [Fact]
@@ -1510,11 +1550,12 @@ namespace Microsoft.AspNetCore.Components.Test
             // Arrange
             var renderer = new TestRenderer { ShouldHandleExceptions = true };
             var component = new NestedAsyncComponent();
+            var tcs = new TaskCompletionSource<int>();
             var exception = new InvalidTimeZoneException();
 
             // Act/Assert
             var componentId = renderer.AssignRootComponentId(component);
-            await renderer.RenderRootComponentAsync(componentId, ParameterCollection.FromDictionary(new Dictionary<string, object>
+            var renderTask = renderer.RenderRootComponentAsync(componentId, ParameterCollection.FromDictionary(new Dictionary<string, object>
             {
                 [nameof(NestedAsyncComponent.EventActions)] = new Dictionary<int, IList<NestedAsyncComponent.ExecutionAction>>
                 {
@@ -1525,7 +1566,7 @@ namespace Microsoft.AspNetCore.Components.Test
                             Event = NestedAsyncComponent.EventType.OnInitAsyncAsync,
                             EventAction = async () =>
                             {
-                                await Task.Yield();
+                                await tcs.Task;
                                 throw exception;
                             }
                         },
@@ -1537,21 +1578,25 @@ namespace Microsoft.AspNetCore.Components.Test
                 },
             }));
 
+            Assert.False(renderTask.IsCompleted);
+            tcs.SetResult(0);
+            await renderTask;
             Assert.Same(exception, Assert.Single(renderer.HandledExceptions).GetBaseException());
         }
 
         [Fact]
-        public async Task ExceptionsThrownFromMultipleComponentsCanBeHandled()
+        public async Task ExceptionsThrownAsynchronouslyFromMultipleComponentsCanBeHandled()
         {
             // Arrange
             var renderer = new TestRenderer { ShouldHandleExceptions = true };
             var component = new NestedAsyncComponent();
             var exception1 = new InvalidTimeZoneException();
             var exception2 = new UriFormatException();
+            var tcs = new TaskCompletionSource<int>();
 
             // Act/Assert
             var componentId = renderer.AssignRootComponentId(component);
-            await renderer.RenderRootComponentAsync(componentId, ParameterCollection.FromDictionary(new Dictionary<string, object>
+            var renderTask = renderer.RenderRootComponentAsync(componentId, ParameterCollection.FromDictionary(new Dictionary<string, object>
             {
                 [nameof(NestedAsyncComponent.EventActions)] = new Dictionary<int, IList<NestedAsyncComponent.ExecutionAction>>
                 {
@@ -1563,7 +1608,7 @@ namespace Microsoft.AspNetCore.Components.Test
                             Event = NestedAsyncComponent.EventType.OnInitAsyncAsync,
                             EventAction = async () =>
                             {
-                                await Task.Yield();
+                                await tcs.Task;
                                 throw exception1;
                             }
                         },
@@ -1575,7 +1620,7 @@ namespace Microsoft.AspNetCore.Components.Test
                             Event = NestedAsyncComponent.EventType.OnInitAsyncAsync,
                             EventAction = async () =>
                             {
-                                await Task.Yield();
+                                await tcs.Task;
                                 throw exception2;
                             }
                         },
@@ -1589,11 +1634,67 @@ namespace Microsoft.AspNetCore.Components.Test
                 },
             }));
 
-            var exception = Assert.Single(renderer.HandledExceptions);
-            var aggregateException = Assert.IsType<AggregateException>(exception);
-            Assert.Equal(2, aggregateException.InnerExceptions.Count);
-            Assert.Contains(exception1, aggregateException.InnerExceptions);
-            Assert.Contains(exception2, aggregateException.InnerExceptions);
+            Assert.False(renderTask.IsCompleted);
+            tcs.SetResult(0);
+
+            await renderTask;
+            Assert.Equal(2, renderer.HandledExceptions.Count);
+            Assert.Contains(exception1, renderer.HandledExceptions);
+            Assert.Contains(exception2, renderer.HandledExceptions);
+        }
+
+        [Fact]
+        public void ExceptionsThrownSynchronouslyFromMultipleComponentsCanBeHandled()
+        {
+            // Arrange
+            var renderer = new TestRenderer { ShouldHandleExceptions = true };
+            var component = new NestedAsyncComponent();
+            var exception1 = new InvalidTimeZoneException();
+            var exception2 = new UriFormatException();
+
+            // Act/Assert
+            var componentId = renderer.AssignRootComponentId(component);
+            var renderTask = renderer.RenderRootComponentAsync(componentId, ParameterCollection.FromDictionary(new Dictionary<string, object>
+            {
+                [nameof(NestedAsyncComponent.EventActions)] = new Dictionary<int, IList<NestedAsyncComponent.ExecutionAction>>
+                {
+                    [0] = Array.Empty<NestedAsyncComponent.ExecutionAction>(),
+                    [1] = new List<NestedAsyncComponent.ExecutionAction>
+                    {
+                        new NestedAsyncComponent.ExecutionAction
+                        {
+                            Event = NestedAsyncComponent.EventType.OnInitAsyncAsync,
+                            EventAction = () =>
+                            {
+                                throw exception1;
+                            }
+                        },
+                    },
+                    [2] = new List<NestedAsyncComponent.ExecutionAction>
+                    {
+                        new NestedAsyncComponent.ExecutionAction
+                        {
+                            Event = NestedAsyncComponent.EventType.OnInitAsyncAsync,
+                            EventAction = () =>
+                            {
+                                throw exception2;
+                            }
+                        },
+                    },
+                },
+                [nameof(NestedAsyncComponent.WhatToRender)] = new Dictionary<int, Func<NestedAsyncComponent, RenderFragment>>
+                {
+                    [0] = CreateRenderFactory(new[] { 1, 2, }),
+                    [1] = CreateRenderFactory(Array.Empty<int>()),
+                    [2] = CreateRenderFactory(Array.Empty<int>()),
+                },
+            }));
+
+            Assert.True(renderTask.IsCompletedSuccessfully);
+
+            Assert.Equal(2, renderer.HandledExceptions.Count);
+            Assert.Contains(exception1, renderer.HandledExceptions);
+            Assert.Contains(exception2, renderer.HandledExceptions);
         }
 
         [Fact]
@@ -1608,7 +1709,7 @@ namespace Microsoft.AspNetCore.Components.Test
 
             // Act/Assert
             var componentId = renderer.AssignRootComponentId(component);
-            await renderer.RenderRootComponentAsync(componentId, ParameterCollection.FromDictionary(new Dictionary<string, object>
+            var renderTask = renderer.RenderRootComponentAsync(componentId, ParameterCollection.FromDictionary(new Dictionary<string, object>
             {
                 [nameof(NestedAsyncComponent.EventActions)] = new Dictionary<int, IList<NestedAsyncComponent.ExecutionAction>>
                 {
@@ -1643,6 +1744,8 @@ namespace Microsoft.AspNetCore.Components.Test
                     [1] = CreateRenderFactory(Array.Empty<int>()),
                 },
             }));
+
+            Assert.True(renderTask.IsCompletedSuccessfully);
 
             // OnAfterRenderAsync happens in the background. Make it more predictable, by gating it until we're ready to capture exceptions.
             await taskCompletionSource.Task.TimeoutAfter(TimeSpan.FromSeconds(10));
@@ -2156,10 +2259,13 @@ namespace Microsoft.AspNetCore.Components.Test
         {
             private RenderHandle _renderHandler;
 
-            public AsyncComponent(int number)
+            public AsyncComponent(Task taskToAwait, int number)
             {
+                _taskToAwait = taskToAwait;
                 Number = number;
             }
+
+            private readonly Task _taskToAwait;
 
             public int Number { get; set; }
 
@@ -2176,7 +2282,7 @@ namespace Microsoft.AspNetCore.Components.Test
                     n = Number;
                     _renderHandler.Render(CreateFragment);
                     Number--;
-                    await Task.Yield();
+                    await _taskToAwait;
                 };
 
                 // Cheap closure
