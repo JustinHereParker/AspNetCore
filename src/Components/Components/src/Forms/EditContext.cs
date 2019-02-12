@@ -36,7 +36,7 @@ namespace Microsoft.AspNetCore.Components.Forms
         /// <summary>
         /// An event that is raised when validation is requested.
         /// </summary>
-        public event EventHandler<ValidationContext> OnValidationRequested;
+        public event EventHandler OnValidationRequested;
 
         /// <summary>
         /// Supplies a <see cref="FieldIdentifier"/> corresponding to a specified field name
@@ -130,9 +130,8 @@ namespace Microsoft.AspNetCore.Components.Forms
         /// <returns>A <see cref="Task"/> that resolves to true if the model is valid; false otherwise.</returns>
         public async Task<bool> ValidateAsync()
         {
-            var validationContext = new ValidationContext();
-            OnValidationRequested?.Invoke(this, validationContext);
-            await validationContext.CombinePendingTasks();
+            OnValidationRequested?.Invoke(this, null); // TODO: Should there be some EventArgs?
+            await GetPendingValidationTask();
             return !GetValidationMessages().Any();
         }
 
@@ -145,6 +144,27 @@ namespace Microsoft.AspNetCore.Components.Forms
             }
 
             return state;
+        }
+
+        private Task GetPendingValidationTask()
+        {
+            List<Task> pendingTasks = null;
+
+            foreach (var state in _fieldStates.Values)
+            {
+                var pendingTaskForField = state.GetPendingValidationTask();
+                if (!pendingTaskForField.IsCompleted)
+                {
+                    if (pendingTasks == null)
+                    {
+                        pendingTasks = new List<Task>();
+                    }
+
+                    pendingTasks.Add(pendingTaskForField);
+                }
+            }
+
+            return pendingTasks != null ? Task.WhenAll(pendingTasks) : Task.CompletedTask;
         }
     }
 }

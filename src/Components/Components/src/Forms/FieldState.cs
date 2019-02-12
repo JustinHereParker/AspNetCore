@@ -3,6 +3,7 @@
 
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading.Tasks;
 
 namespace Microsoft.AspNetCore.Components.Forms
 {
@@ -25,6 +26,35 @@ namespace Microsoft.AspNetCore.Components.Forms
 
         public IEnumerable<string> GetValidationMessages()
             => _validationMessageStores == null ? Enumerable.Empty<string>() : _validationMessageStores.SelectMany(store => store[_fieldIdentifier]);
+
+        public Task GetPendingValidationTask()
+        {
+            if (_validationMessageStores != null)
+            {
+                List<Task> pendingTasks = null;
+
+                foreach (var store in _validationMessageStores)
+                {
+                    var pendingTaskForStore = store.GetPendingTask(_fieldIdentifier);
+                    if (!pendingTaskForStore.IsCompleted)
+                    {
+                        if (pendingTasks == null)
+                        {
+                            pendingTasks = new List<Task>();
+                        }
+
+                        pendingTasks.Add(pendingTaskForStore);
+                    }
+                }
+
+                if (pendingTasks != null)
+                {
+                    return Task.WhenAll(pendingTasks);
+                }
+            }
+
+            return Task.CompletedTask;
+        }
 
         public void AssociateWithValidationMessageStore(ValidationMessageStore validationMessageStore)
         {

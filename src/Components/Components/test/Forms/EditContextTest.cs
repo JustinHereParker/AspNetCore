@@ -192,7 +192,7 @@ namespace Microsoft.AspNetCore.Components.Tests.Forms
             // Arrange
             var editContext = new EditContext(new object());
             var didReceiveCallback = false;
-            editContext.OnValidationRequested += (sender, validationContext) =>
+            editContext.OnValidationRequested += (sender, eventArgs) =>
             {
                 Assert.Same(editContext, sender);
                 didReceiveCallback = true;
@@ -212,7 +212,7 @@ namespace Microsoft.AspNetCore.Components.Tests.Forms
             // Arrange
             var editContext = new EditContext(new object());
             var messages = new ValidationMessageStore(editContext);
-            editContext.OnValidationRequested += (sender, validationContext) =>
+            editContext.OnValidationRequested += (sender, eventArgs) =>
             {
                 Assert.Same(editContext, sender);
                 messages.Add(editContext.Field("some field"), "Some message");
@@ -230,11 +230,13 @@ namespace Microsoft.AspNetCore.Components.Tests.Forms
         {
             // Arrange
             var editContext = new EditContext(new object());
+            var messages = new ValidationMessageStore(editContext);
+            var field = new FieldIdentifier(new object(), "somefield");
             var didReceiveCallback = false;
-            editContext.OnValidationRequested += (sender, validationContext) =>
+            editContext.OnValidationRequested += (sender, eventArgs) =>
             {
                 Assert.Same(editContext, sender);
-                validationContext.AddPendingTask(TestAsyncTask());
+                messages.AddTask(field, TestAsyncTask());
                 didReceiveCallback = true;
             };
 
@@ -257,10 +259,11 @@ namespace Microsoft.AspNetCore.Components.Tests.Forms
             // Arrange
             var editContext = new EditContext(new object());
             var messages = new ValidationMessageStore(editContext);
-            editContext.OnValidationRequested += (sender, validationContext) =>
+            var field = new FieldIdentifier(new object(), "somefield");
+            editContext.OnValidationRequested += (sender, eventArgs) =>
             {
                 Assert.Same(editContext, sender);
-                validationContext.AddPendingTask(TestAsyncTask());
+                messages.AddTask(field, TestAsyncTask());
             };
 
             // Act
@@ -272,7 +275,7 @@ namespace Microsoft.AspNetCore.Components.Tests.Forms
             async Task TestAsyncTask()
             {
                 await Task.Yield();
-                messages.Add(editContext.Field("some field"), "Some message");
+                messages.Add(editContext.Field("some other field"), "Some message");
             }
         }
     }

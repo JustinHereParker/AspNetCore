@@ -4,6 +4,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading.Tasks;
 
 namespace Microsoft.AspNetCore.Components.Forms
 {
@@ -13,7 +14,10 @@ namespace Microsoft.AspNetCore.Components.Forms
     public class ValidationMessageStore
     {
         private readonly EditContext _editContext;
+
+        // TODO: Lazily instantiate
         private readonly Dictionary<FieldIdentifier, List<string>> _messages = new Dictionary<FieldIdentifier, List<string>>();
+        private readonly Dictionary<FieldIdentifier, Task> _pendingTasks = new Dictionary<FieldIdentifier, Task>();
 
         /// <summary>
         /// Creates an instance of <see cref="ValidationMessageStore"/>.
@@ -40,6 +44,25 @@ namespace Microsoft.AspNetCore.Components.Forms
         public void AddRange(FieldIdentifier fieldIdentifier, IEnumerable<string> messages)
             => GetOrCreateMessagesListForField(fieldIdentifier).AddRange(messages);
 
+        public void AddTask(FieldIdentifier fieldIdentifier, Task task)
+        {
+            if (task == null)
+            {
+                throw new ArgumentNullException(nameof(task));
+            }
+
+            if (_pendingTasks.TryGetValue(fieldIdentifier, out var existingTask)
+                && !existingTask.IsCompleted)
+            {
+                task = Task.WhenAll(existingTask, task);
+            }
+
+            // Add or overwrite
+            _pendingTasks[fieldIdentifier] = task;
+
+            AssociateWithField(fieldIdentifier);
+        }
+
         /// <summary>
         /// Gets the validation messages within this <see cref="ValidationMessageStore"/> for the specified field.
         ///
@@ -52,6 +75,9 @@ namespace Microsoft.AspNetCore.Components.Forms
             get => _messages.TryGetValue(fieldIdentifier, out var messages) ? messages : Enumerable.Empty<string>();
         }
 
+        public Task GetPendingTask(FieldIdentifier fieldIdentifier)
+            => _pendingTasks.TryGetValue(fieldIdentifier, out var result) ? result : Task.CompletedTask;
+
         /// <summary>
         /// Removes all messages within this <see cref="ValidationMessageStore"/>.
         /// </summary>
@@ -63,6 +89,7 @@ namespace Microsoft.AspNetCore.Components.Forms
             }
 
             _messages.Clear();
+            _pendingTasks.Clear();
         }
 
         /// <summary>
@@ -73,6 +100,7 @@ namespace Microsoft.AspNetCore.Components.Forms
         {
             DissociateFromField(fieldIdentifier);
             _messages.Remove(fieldIdentifier);
+            _pendingTasks.Remove(fieldIdentifier);
         }
 
         private List<string> GetOrCreateMessagesListForField(FieldIdentifier fieldIdentifier)
